@@ -1,0 +1,16 @@
+# pixi environments
+.pixi/*
+!.pixi/config.toml
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Local downloads
+imagens/
+*.zip
+
+# Local credentials and secrets
+.netrc
+*.env
+*.env.*

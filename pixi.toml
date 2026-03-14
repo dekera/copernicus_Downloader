@@ -1,0 +1,12 @@
+[workspace]
+authors = ["André Favalessa <andrefavalessa@gmail.com>"]
+channels = ["conda-forge"]
+name = "downloadercopernicus"
+platforms = ["win-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+python = ">=3.14.3,<3.15"
+requests = ">=2.32.5,<3"
