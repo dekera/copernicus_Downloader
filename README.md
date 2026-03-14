@@ -147,7 +147,3 @@ Melhorias previstas para as próximas versões:
 - [Copernicus Data Space Ecosystem](https://dataspace.copernicus.eu/)
 - [Documentação de autenticação](https://documentation.dataspace.copernicus.eu/APIs/Token.html)
 - [Documentação da OData API](https://documentation.dataspace.copernicus.eu/APIs/OData.html)
-
-## Licença
-
-Defina aqui a licença do projeto, por exemplo `MIT`, `Apache-2.0` ou uso interno.
