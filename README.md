@@ -40,7 +40,7 @@ Dependências atuais do projeto:
 O script lê as credenciais a partir de:
 
 ```text
-C:\Users\andre\.netrc
+C:\Users\{seu_usuario}\.netrc
 ```
 
 Exemplo de estrutura esperada:
