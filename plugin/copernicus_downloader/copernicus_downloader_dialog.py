@@ -1,7 +1,20 @@
+from typing import Optional
+
 from pathlib import Path
 
-from qgis.PyQt.QtCore import QObject, QThread, pyqtSignal
-from qgis.PyQt.QtWidgets import QFileDialog, QMainWindow, QMessageBox, QPushButton
+from qgis.PyQt.QtCore import QObject, Qt, QThread, pyqtSignal
+from qgis.PyQt.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+)
 from qgis.PyQt.uic import loadUi
 
 from .downloader import Downloader
@@ -33,6 +46,50 @@ class DownloadWorker(QObject):
             self.error.emit(str(exc))
         finally:
             self.finished.emit()
+
+
+class RasterSelectionDialog(QDialog):
+    """Dialogo simples para o usuario escolher qual raster carregara no QGIS."""
+
+    def __init__(self, raster_paths: list[Path], parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Escolher raster")
+        self.resize(720, 420)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(
+            QLabel("Selecione o raster que deseja carregar no QGIS. O primeiro item e o recomendado.")
+        )
+
+        self.raster_list = QListWidget(self)
+        for raster_path in raster_paths:
+            item = QListWidgetItem(self._build_item_label(raster_path))
+            item.setData(Qt.UserRole, str(raster_path))
+            item.setToolTip(str(raster_path))
+            self.raster_list.addItem(item)
+
+        if self.raster_list.count() > 0:
+            self.raster_list.setCurrentRow(0)
+
+        layout.addWidget(self.raster_list)
+
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel,
+            parent=self,
+        )
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)
+
+    def selected_raster_path(self) -> Optional[Path]:
+        current_item = self.raster_list.currentItem()
+        if current_item is None:
+            return None
+        return Path(current_item.data(Qt.UserRole))
+
+    def _build_item_label(self, raster_path: Path) -> str:
+        tail_parts = raster_path.parts[-4:]
+        return "/".join(tail_parts)
 
 
 class CopernicusDownloaderWindow(QMainWindow):
@@ -123,17 +180,29 @@ class CopernicusDownloaderWindow(QMainWindow):
 
     def _download_concluido(self, downloaded_path: str) -> None:
         self._add_log(f"Arquivo baixado: {downloaded_path}")
-        self.labelStatus.setText("Download concluido. Carregando camada no QGIS...")
+        self.labelStatus.setText("Download concluido. Preparando selecao da camada...")
 
         try:
-            # O carregamento da camada acontece na interface principal, onde o QGIS pode
-            # manipular o projeto com seguranca.
             loader = LayerLoader(
                 self.iface,
                 destination_folder=self.destination_folder,
                 netrc_path=self.netrc_path,
             )
-            loaded_source = loader.load_downloaded_product(downloaded_path)
+
+            raster_candidates = loader.list_raster_candidates(downloaded_path)
+            if raster_candidates:
+                selected_raster = self._select_raster(raster_candidates)
+                if selected_raster is None:
+                    self.labelStatus.setText("Carregamento cancelado pelo usuario.")
+                    self._add_log("Nenhum raster foi carregado.")
+                    return
+
+                # O carregamento da camada acontece na interface principal, onde o QGIS pode
+                # manipular o projeto com seguranca.
+                loaded_source = loader.load_raster_source(selected_raster)
+            else:
+                loaded_source = loader.load_downloaded_product(downloaded_path)
+
             self.labelStatus.setText("Camada adicionada ao projeto com sucesso.")
             self._add_log(f"Camada carregada a partir de: {loaded_source}")
         except Exception as exc:
@@ -151,3 +220,14 @@ class CopernicusDownloaderWindow(QMainWindow):
 
     def _add_log(self, mensagem: str) -> None:
         self.plainTextEditLog.appendPlainText(mensagem)
+
+    def _select_raster(self, raster_candidates: list[Path]) -> Optional[Path]:
+        self._add_log(f"Rasters encontrados: {len(raster_candidates)}")
+        dialog = RasterSelectionDialog(raster_candidates, self)
+        if dialog.exec_() != QDialog.Accepted:
+            return None
+
+        selected_raster = dialog.selected_raster_path()
+        if selected_raster is not None:
+            self._add_log(f"Raster escolhido: {selected_raster}")
+        return selected_raster

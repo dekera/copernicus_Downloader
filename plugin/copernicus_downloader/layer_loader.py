@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 from zipfile import ZipFile
 
 from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer
@@ -22,32 +22,44 @@ class LayerLoader:
         return self.downloader.download_file(product_name)
 
     def load_downloaded_product(self, downloaded_path: str) -> str:
-        path = Path(downloaded_path)
-        if not path.exists():
-            raise FileNotFoundError(f"Arquivo baixado nao encontrado: {path}")
+        path = self._validate_downloaded_path(downloaded_path)
 
         # Resolve o caminho final a ser aberto, seja vindo de ZIP, pasta ou arquivo direto.
         source_path, layer_kind = self._resolve_source(path)
 
         if layer_kind == "raster":
-            layer = QgsRasterLayer(str(source_path), source_path.stem)
-            if not layer.isValid():
-                raise RuntimeError(f"Falha ao carregar raster no QGIS: {source_path}")
-            QgsProject.instance().addMapLayer(layer)
-            return str(source_path)
+            return self.load_raster_source(source_path)
 
-        layer = QgsVectorLayer(str(source_path), source_path.stem, "ogr")
+        return self._load_vector_source(source_path)
+
+    def list_raster_candidates(self, downloaded_path: str) -> List[Path]:
+        path = self._validate_downloaded_path(downloaded_path)
+        search_root = self._resolve_search_root(path)
+
+        if search_root is None:
+            source_path, layer_kind = self._classify_direct_path(path)
+            return [source_path] if layer_kind == "raster" else []
+
+        candidates = self._list_files_by_extension(search_root, self.RASTER_EXTENSIONS)
+        return sorted(candidates, key=self._raster_sort_key)
+
+    def load_raster_source(self, raster_path: Path) -> str:
+        layer = QgsRasterLayer(str(raster_path), raster_path.stem)
         if not layer.isValid():
-            raise RuntimeError(f"Falha ao carregar vetor no QGIS: {source_path}")
+            raise RuntimeError(f"Falha ao carregar raster no QGIS: {raster_path}")
         QgsProject.instance().addMapLayer(layer)
-        return str(source_path)
+        return str(raster_path)
+
+    def _load_vector_source(self, vector_path: Path) -> str:
+        layer = QgsVectorLayer(str(vector_path), vector_path.stem, "ogr")
+        if not layer.isValid():
+            raise RuntimeError(f"Falha ao carregar vetor no QGIS: {vector_path}")
+        QgsProject.instance().addMapLayer(layer)
+        return str(vector_path)
 
     def _resolve_source(self, path: Path) -> tuple[Path, str]:
-        if path.is_dir():
-            search_root = path
-        elif path.suffix.lower() == ".zip":
-            search_root = self._extract_zip(path)
-        else:
+        search_root = self._resolve_search_root(path)
+        if search_root is None:
             return self._classify_direct_path(path)
 
         raster = self._find_best_raster(search_root)
@@ -69,6 +81,19 @@ class LayerLoader:
         if suffix in self.VECTOR_EXTENSIONS:
             return path, "vector"
         raise RuntimeError(f"Formato nao suportado para carregamento direto: {path.suffix}")
+
+    def _validate_downloaded_path(self, downloaded_path: str) -> Path:
+        path = Path(downloaded_path)
+        if not path.exists():
+            raise FileNotFoundError(f"Arquivo baixado nao encontrado: {path}")
+        return path
+
+    def _resolve_search_root(self, path: Path) -> Optional[Path]:
+        if path.is_dir():
+            return path
+        if path.suffix.lower() == ".zip":
+            return self._extract_zip(path)
+        return None
 
     def _extract_zip(self, zip_path: Path) -> Path:
         extract_dir = zip_path.parent / zip_path.stem
