@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Optional
 from zipfile import ZipFile
 
 from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer
@@ -12,7 +13,8 @@ class LayerLoader:
     RASTER_EXTENSIONS = {".jp2", ".tif", ".tiff"}
     VECTOR_EXTENSIONS = {".gpkg", ".geojson", ".shp"}
 
-    def __init__(self, iface, destination_folder: str, netrc_path: str | None = None):
+    def __init__(self, iface, destination_folder: str, netrc_path: Optional[str] = None):
+        # Mantemos a assinatura com iface para ficar alinhado ao plugin/QGIS e ao UML.
         self.iface = iface
         self.downloader = Downloader("copernicus", destination_folder, netrc_path)
 
@@ -24,6 +26,7 @@ class LayerLoader:
         if not path.exists():
             raise FileNotFoundError(f"Arquivo baixado nao encontrado: {path}")
 
+        # Resolve o caminho final a ser aberto, seja vindo de ZIP, pasta ou arquivo direto.
         source_path, layer_kind = self._resolve_source(path)
 
         if layer_kind == "raster":
@@ -74,25 +77,28 @@ class LayerLoader:
             zip_file.extractall(extract_dir)
         return extract_dir
 
-    def _find_best_raster(self, root: Path) -> Path | None:
-        candidates = [
-            candidate
-            for candidate in root.rglob("*")
-            if candidate.is_file() and candidate.suffix.lower() in self.RASTER_EXTENSIONS
-        ]
+    def _find_best_raster(self, root: Path) -> Optional[Path]:
+        # Entre todos os rasters do produto, escolhemos o mais adequado para abrir no QGIS.
+        candidates = self._list_files_by_extension(root, self.RASTER_EXTENSIONS)
         if not candidates:
             return None
         return min(candidates, key=self._raster_sort_key)
 
-    def _find_first_by_extension(self, root: Path, extensions: set[str]) -> Path | None:
-        candidates = [
-            candidate
-            for candidate in root.rglob("*")
-            if candidate.is_file() and candidate.suffix.lower() in extensions
-        ]
+    def _find_first_by_extension(self, root: Path, extensions: set[str]) -> Optional[Path]:
+        candidates = self._list_files_by_extension(root, extensions)
         if not candidates:
             return None
-        return sorted(candidates, key=lambda path: str(path).lower())[0]
+        return candidates[0]
+
+    def _list_files_by_extension(self, root: Path, extensions: set[str]) -> list[Path]:
+        return sorted(
+            (
+                candidate
+                for candidate in root.rglob("*")
+                if candidate.is_file() and candidate.suffix.lower() in extensions
+            ),
+            key=lambda current_path: str(current_path).lower(),
+        )
 
     def _raster_sort_key(self, path: Path) -> tuple[int, int, str]:
         return (
@@ -108,6 +114,7 @@ class LayerLoader:
         in_r10m_folder = "/img_data/r10m/" in normalized_path
         in_r20m_folder = "/img_data/r20m/" in normalized_path
 
+        # A prioridade reflete a regra do trabalho: tentar abrir primeiro o TCI em 10 m.
         if normalized_name.endswith("_tci_10m.jp2"):
             return 0 if in_r10m_folder else 1
         if normalized_name.endswith("_tci_20m.jp2"):

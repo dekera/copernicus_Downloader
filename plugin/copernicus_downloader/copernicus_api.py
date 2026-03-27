@@ -33,6 +33,7 @@ class CopernicusDownloader:
         if not nome_consulta:
             raise ValueError("O nome da imagem nao pode ser vazio.")
 
+        # O fluxo da API e: localizar o produto, autenticar e so entao baixar o ZIP.
         produto = self._buscar_produto(nome_consulta)
         token = self._obter_token()
 
@@ -82,6 +83,7 @@ class CopernicusDownloader:
         if credenciais is None:
             credenciais = parser_netrc.authenticators("identity.dataspace.copernicus.eu")
         if credenciais is None:
+            # Fallback para arquivos .netrc simples que o parser padrao nao conseguiu ler.
             credenciais = self._ler_credenciais_manualmente()
 
         if credenciais is None:
@@ -129,6 +131,7 @@ class CopernicusDownloader:
         if not nome_imagem.endswith(".SAFE"):
             nomes_tentados.append(f"{nome_imagem}.SAFE")
 
+        # Alguns usuarios informam o nome com .SAFE e outros sem; tentamos os dois formatos.
         for nome in nomes_tentados:
             produto = self._buscar_por_nome_exato(nome)
             if produto is not None:

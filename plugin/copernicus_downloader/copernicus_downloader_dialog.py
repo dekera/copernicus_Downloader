@@ -9,6 +9,7 @@ from .layer_loader import LayerLoader
 
 
 class DownloadWorker(QObject):
+    # O worker executa o download fora da thread da interface para nao travar o QGIS.
     finished = pyqtSignal()
     success = pyqtSignal(str)
     error = pyqtSignal(str)
@@ -109,6 +110,7 @@ class CopernicusDownloaderWindow(QMainWindow):
         self.worker = DownloadWorker(nome_imagem, self.destination_folder, self.netrc_path)
         self.worker.moveToThread(self.thread_download)
 
+        # O worker faz o download na thread secundaria; os sinais voltam para a janela.
         self.thread_download.started.connect(self.worker.run)
         self.worker.success.connect(self._download_concluido)
         self.worker.error.connect(self._mostrar_erro)
@@ -124,6 +126,8 @@ class CopernicusDownloaderWindow(QMainWindow):
         self.labelStatus.setText("Download concluido. Carregando camada no QGIS...")
 
         try:
+            # O carregamento da camada acontece na interface principal, onde o QGIS pode
+            # manipular o projeto com seguranca.
             loader = LayerLoader(
                 self.iface,
                 destination_folder=self.destination_folder,
