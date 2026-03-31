@@ -13,7 +13,7 @@ class CopernicusDownloader:
     DOWNLOAD_URL = "https://download.dataspace.copernicus.eu/odata/v1/Products({product_id})/$value"
     CLIENT_ID = "cdse-public"
     TIMEOUT = 120
-    CHUNK_SIZE = 4 * 1024 * 1024
+    CHUNK_SIZE = 20 * 1024 * 1024
 
     def __init__(
         self,
@@ -82,9 +82,6 @@ class CopernicusDownloader:
         credenciais = parser_netrc.authenticators(self.machine_name)
         if credenciais is None:
             credenciais = parser_netrc.authenticators("identity.dataspace.copernicus.eu")
-        if credenciais is None:
-            # Fallback para arquivos .netrc simples que o parser padrao nao conseguiu ler.
-            credenciais = self._ler_credenciais_manualmente()
 
         if credenciais is None:
             raise RuntimeError(
@@ -96,78 +93,44 @@ class CopernicusDownloader:
             raise RuntimeError("As credenciais no .netrc estao incompletas.")
         return login, password
 
-    def _ler_credenciais_manualmente(self) -> Optional[tuple[str, None, str]]:
-        machine_atual = None
-        login = None
-        password = None
-
-        for linha in self.netrc_path.read_text(encoding="utf-8").splitlines():
-            linha = linha.strip()
-            if not linha or linha.startswith("#"):
-                continue
-
-            partes = linha.split(maxsplit=1)
-            if len(partes) != 2:
-                continue
-
-            chave, valor = partes
-            if chave == "machine":
-                if machine_atual == self.machine_name and login and password:
-                    return login, None, password
-                machine_atual = valor
-                login = None
-                password = None
-            elif machine_atual == self.machine_name and chave == "login":
-                login = valor
-            elif machine_atual == self.machine_name and chave == "password":
-                password = valor
-
-        if machine_atual == self.machine_name and login and password:
-            return login, None, password
-        return None
-
     def _buscar_produto(self, nome_imagem: str) -> dict:
-        nomes_tentados = [nome_imagem]
+        nomes_consulta = [nome_imagem]
         if not nome_imagem.endswith(".SAFE"):
-            nomes_tentados.append(f"{nome_imagem}.SAFE")
+            nomes_consulta.append(f"{nome_imagem}.SAFE")
 
-        # Alguns usuarios informam o nome com .SAFE e outros sem; tentamos os dois formatos.
-        for nome in nomes_tentados:
-            produto = self._buscar_por_nome_exato(nome)
-            if produto is not None:
-                return produto
+        for nome_consulta in nomes_consulta:
+            filtro = f"Name eq '{self._escapar_valor_odata(nome_consulta)}'"
+            response = self.session.get(
+                self.CATALOGUE_URL,
+                params={
+                    "$filter": filtro,
+                    "$select": "Id,Name,Online,ContentLength",
+                    "$top": 2,
+                },
+                timeout=self.TIMEOUT,
+            )
+            response.raise_for_status()
+
+            produtos = response.json().get("value", [])
+            if not produtos:
+                continue
+
+            if len(produtos) > 1:
+                raise RuntimeError(
+                    f"A busca por '{nome_consulta}' retornou mais de um produto, revise o filtro."
+                )
+
+            produto = produtos[0]
+            if produto.get("Online") is False:
+                raise RuntimeError(
+                    f"O produto '{nome_consulta}' existe, mas nao esta online para download."
+                )
+            return produto
 
         raise FileNotFoundError(
-            "Produto nao encontrado no catalogo Copernicus. "
-            f"Nomes tentados: {', '.join(nomes_tentados)}"
+            "Produto nao encontrado no catalogo Copernicus: "
+            f"{', '.join(nomes_consulta)}"
         )
-
-    def _buscar_por_nome_exato(self, nome_imagem: str) -> Optional[dict]:
-        filtro = f"Name eq '{self._escapar_valor_odata(nome_imagem)}'"
-        response = self.session.get(
-            self.CATALOGUE_URL,
-            params={
-                "$filter": filtro,
-                "$select": "Id,Name,Online,ContentLength",
-                "$top": 2,
-            },
-            timeout=self.TIMEOUT,
-        )
-        response.raise_for_status()
-
-        produtos = response.json().get("value", [])
-        if not produtos:
-            return None
-
-        if len(produtos) > 1:
-            raise RuntimeError(
-                f"A busca por '{nome_imagem}' retornou mais de um produto, revise o filtro."
-            )
-
-        produto = produtos[0]
-        if produto.get("Online") is False:
-            raise RuntimeError(f"O produto '{nome_imagem}' existe, mas nao esta online para download.")
-        return produto
 
     @staticmethod
     def _escapar_valor_odata(valor: str) -> str:
