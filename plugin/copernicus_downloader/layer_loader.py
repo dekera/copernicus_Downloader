@@ -40,8 +40,7 @@ class LayerLoader:
             source_path, layer_kind = self._classify_direct_path(path)
             return [source_path] if layer_kind == "raster" else []
 
-        candidates = self._list_files_by_extension(search_root, self.RASTER_EXTENSIONS)
-        return sorted(candidates, key=self._raster_sort_key)
+        return self._list_files_by_extension(search_root, self.RASTER_EXTENSIONS)
 
     def load_raster_source(self, raster_path: Path) -> str:
         layer = QgsRasterLayer(str(raster_path), raster_path.stem)
@@ -103,11 +102,10 @@ class LayerLoader:
         return extract_dir
 
     def _find_best_raster(self, root: Path) -> Optional[Path]:
-        # Entre todos os rasters do produto, escolhemos o mais adequado para abrir no QGIS.
         candidates = self._list_files_by_extension(root, self.RASTER_EXTENSIONS)
         if not candidates:
             return None
-        return min(candidates, key=self._raster_sort_key)
+        return candidates[0]
 
     def _find_first_by_extension(self, root: Path, extensions: set[str]) -> Optional[Path]:
         candidates = self._list_files_by_extension(root, extensions)
@@ -124,34 +122,3 @@ class LayerLoader:
             ),
             key=lambda current_path: str(current_path).lower(),
         )
-
-    def _raster_sort_key(self, path: Path) -> tuple[int, int, str]:
-        return (
-            self._raster_priority(path),
-            len(path.parts),
-            str(path).lower(),
-        )
-
-    def _raster_priority(self, path: Path) -> int:
-        normalized_path = str(path).replace("\\", "/").lower()
-        normalized_name = path.name.lower()
-
-        in_r10m_folder = "/img_data/r10m/" in normalized_path
-        in_r20m_folder = "/img_data/r20m/" in normalized_path
-
-        # A prioridade reflete a regra do trabalho: tentar abrir primeiro o TCI em 10 m.
-        if normalized_name.endswith("_tci_10m.jp2"):
-            return 0 if in_r10m_folder else 1
-        if normalized_name.endswith("_tci_20m.jp2"):
-            return 2 if in_r20m_folder else 3
-        if normalized_name.endswith("_b04_10m.jp2"):
-            return 4
-        if normalized_name.endswith("_b03_10m.jp2"):
-            return 5
-        if normalized_name.endswith("_b02_10m.jp2"):
-            return 6
-        if normalized_name.endswith(".jp2"):
-            return 7 if in_r10m_folder else 8
-        if normalized_name.endswith(".tif") or normalized_name.endswith(".tiff"):
-            return 9
-        return 99

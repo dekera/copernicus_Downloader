@@ -1,5 +1,0 @@
-<RCC>
-    <qresource prefix="/plugins/copernicus_downloader" >
-        <file>icon.png</file>
-    </qresource>
-</RCC>

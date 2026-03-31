@@ -57,9 +57,7 @@ class RasterSelectionDialog(QDialog):
         self.resize(720, 420)
 
         layout = QVBoxLayout(self)
-        layout.addWidget(
-            QLabel("Selecione o raster que deseja carregar no QGIS. O primeiro item e o recomendado.")
-        )
+        layout.addWidget(QLabel("Selecione o raster que deseja carregar no QGIS."))
 
         self.raster_list = QListWidget(self)
         for raster_path in raster_paths:
@@ -121,7 +119,7 @@ class CopernicusDownloaderWindow(QMainWindow):
         self.labelTitulo.setText("Downloader Copernicus para QGIS")
         self.labelDescricao.setText(
             "Informe o nome do produto Copernicus. O plugin baixa o ZIP, extrai o produto "
-            "e adiciona ao projeto a melhor camada encontrada."
+            "e permite escolher qual raster carregar no projeto."
         )
         self.labelPastaTitulo.setText("Pasta de destino")
         self.labelPastaDestino.setText(self.destination_folder)

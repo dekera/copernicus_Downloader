@@ -43,7 +43,7 @@
     <item>
      <widget class="QLabel" name="labelDescricao">
       <property name="text">
-       <string>Informe o nome exato do produto e clique em Download. As credenciais serao lidas do arquivo .netrc local.</string>
+       <string>Informe o nome exato do produto e clique em Download. O plugin baixa o produto e permite escolher qual raster carregar no projeto.</string>
       </property>
       <property name="wordWrap">
        <bool>true</bool>
